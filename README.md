@@ -10,7 +10,7 @@ This simulator does not solve collision. So in the example 3.2, the Hamilton of 
 
 * * *  
 
-Dependency: openMP(not now);
+Dependency: openMPI(ditributed condition only);
 
 Example dependency: GNU Plot, make, cc;  
 
