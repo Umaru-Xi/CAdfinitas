@@ -15,7 +15,8 @@ typedef enum {
     _XI_RETURN_NO_ENOUGH_ITEM,
     _XI_RETURN_FILE_ERROR,
     _XI_RETURN_MISMATCH_ITEM,
-    _XI_RETURN_DIVIDE_BY_ZERO
+    _XI_RETURN_DIVIDE_BY_ZERO,
+    _XI_RETURN_MPI_ERROR
     } xiReturnCode;
 
 // 3D Vector type
@@ -31,6 +32,12 @@ typedef struct {
     long double* vec;
 } xiVector;
 
+// Parallel control type
+typedef enum {
+    _XI_CONTROL_COMPUTE = 0,
+    _XI_CONTROL_STOP,
+    _XI_CONTROL_WAIT
+} xiControlCode;
 
 // ====== Vector Functions ======
 // Result=func.(Result) for vector;

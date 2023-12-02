@@ -1,6 +1,5 @@
 #include "libXi.h"
 #include "libCAdfinitas.h"
-// #include 
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -10,6 +9,181 @@ const long double _adfinitasGravitationalConstant = 6.6743e-11;
 const long double _adfinitasVacuumPermittivity = 8.8541878128e-12;
 const long double _adfinitasVacuumPermeability = 1.25663706212e-6;
 
+#ifdef _ADFINITAS_MPI
+#include <mpi.h>
+int _adfinitasMPI_PID = 0, _adfinitasMPI_RankSize = 0;
+
+xiReturnCode adfinitasMPIRunSystem(adfinitasSystem* system){
+    unsigned long timeIndex = 0;
+    xiReturnCode returnCode;
+
+    for(timeIndex = 0; timeIndex < system->totalSteps; ++timeIndex){
+        returnCode = (*system->integrator)(system);
+        if(returnCode != _XI_RETURN_OK) return returnCode;
+    }
+
+    return _XI_RETURN_OK;
+}
+
+xiReturnCode adfinitasMPIIntegratorSemiImplicitEuler(adfinitasSystem* system){
+    adfinitasBody* body = NULL;
+    xiVector3 pastPosition;
+    xiVector3 pastVelocity;
+    xiVector3 pastAcceleration;
+    xiVector3 tmpVector;
+    long double lastTime = 0., timeStep = 0., newTime = 0.;
+    xiReturnCode returnCode;
+    xiVector3 newPosition, newVelocity, newAcceleration;
+    unsigned long motionBodyIndex = 0;
+
+    if(_adfinitasMPI_PID == 0){
+        timeStep = system->timeStep;
+        xiInitVector3(&newAcceleration, 0., 0., 0.);
+        for(motionBodyIndex = 0; motionBodyIndex < system->bodyNumber; ++motionBodyIndex){
+            body = &system->body[motionBodyIndex];
+        
+            returnCode = adfinitasBodyLoadTrackRecordInv(body, 0, &lastTime, &pastPosition, &pastVelocity, &pastAcceleration);
+            if(returnCode != _XI_RETURN_OK) return returnCode;
+            newTime = lastTime + timeStep;
+
+            // v1 = v0 + a0*dt
+            xiMulNumberVector3(timeStep, pastAcceleration, &tmpVector);
+            xiFunc2Vector3(xiAdd, tmpVector, pastVelocity, &newVelocity);
+
+            // x1 = x0 + v1*dt
+            xiMulNumberVector3(timeStep, newVelocity, &tmpVector);
+            xiFunc2Vector3(xiAdd, tmpVector, pastPosition, &newPosition);
+
+            returnCode = adfinitasBodyInsertTrackRecord(body, newTime, newPosition, newVelocity, newAcceleration);
+            if(returnCode != _XI_RETURN_OK) return returnCode;
+        }
+
+        for(motionBodyIndex = 0; motionBodyIndex < system->bodyNumber; ++motionBodyIndex){
+            system->body[motionBodyIndex].lastTrack->steps = system->body[motionBodyIndex].lastTrack->steps + 1;
+        }
+    }
+    adfinitasMPIWait();
+
+    adfinitaMPIUpdateAllAcceleration(system);
+
+    return _XI_RETURN_OK;
+}
+
+void adfinitaMPIUpdateAllAcceleration(adfinitasSystem* system){
+    adfinitasBody *sourceBody = NULL, *motionBody = NULL;
+    adfinitasTrack *motionTrack = NULL, *sourceTrack = NULL;
+    unsigned long sourceBodyIndex = 0, motionBodyIndex = 0, updateStep = 0;
+    xiVector3 newAcceleration, subAcceleration;
+    xiVector3 sourcePosition, motionPosition;
+
+    long double MPISendPackat[8];
+    long double MPIRecvPackat[8];
+    MPI_Status MPIStatus;
+    int PID = 1, recvPID = 0;
+
+    PID = 1;
+    MPIStatus.MPI_TAG = _XI_CONTROL_WAIT;
+    if(_adfinitasMPI_PID == 0){
+        MPISendPackat[7] = system->gravitationalConstant;
+        for(motionBodyIndex = 0; motionBodyIndex < system->bodyNumber; ++motionBodyIndex){
+
+            motionBody = &system->body[motionBodyIndex];
+            motionTrack = motionBody->lastTrack;
+            updateStep = motionTrack->steps - 1;
+            xiInitVector3(&newAcceleration, 0., 0., 0.);
+
+            MPISendPackat[0] = motionTrack->position[updateStep].x;
+            MPISendPackat[1] = motionTrack->position[updateStep].y;
+            MPISendPackat[2] = motionTrack->position[updateStep].z;
+
+            for(sourceBodyIndex = 0; sourceBodyIndex < system->bodyNumber; ++sourceBodyIndex){
+                if(sourceBodyIndex == motionBodyIndex) continue;
+                sourceBody = &system->body[sourceBodyIndex];
+                sourceTrack = sourceBody->lastTrack;
+
+                MPISendPackat[3] = sourceTrack->position[updateStep].x;
+                MPISendPackat[4] = sourceTrack->position[updateStep].y;
+                MPISendPackat[5] = sourceTrack->position[updateStep].z;
+                MPISendPackat[6] = sourceBody->staticMass;
+
+                MPI_Send(MPISendPackat, 8, MPI_LONG_DOUBLE, PID, _XI_CONTROL_COMPUTE, MPI_COMM_WORLD);
+                ++PID;
+                if(PID >= _adfinitasMPI_RankSize){
+                    for(recvPID = 1; recvPID < _adfinitasMPI_RankSize; ++recvPID){
+
+                        MPI_Recv(MPIRecvPackat, 3, MPI_LONG_DOUBLE, recvPID, MPI_ANY_TAG, MPI_COMM_WORLD, &MPIStatus);
+
+                        xiInitVector3(&subAcceleration, MPIRecvPackat[0], MPIRecvPackat[1], MPIRecvPackat[2]);
+                        xiFunc2Vector3(xiAdd, subAcceleration, newAcceleration, &newAcceleration);
+                    }
+                    PID = 1;
+                }
+            }
+            if(PID >= 1){
+                for(recvPID = 1; recvPID < PID; ++recvPID){
+                    MPI_Recv(MPIRecvPackat, 3, MPI_LONG_DOUBLE, recvPID, MPI_ANY_TAG, MPI_COMM_WORLD, &MPIStatus);
+
+                    xiInitVector3(&subAcceleration, MPIRecvPackat[0], MPIRecvPackat[1], MPIRecvPackat[2]);
+                    xiFunc2Vector3(xiAdd, subAcceleration, newAcceleration, &newAcceleration);
+                }
+                PID = 1;
+            }
+            xiInitVector3(&motionTrack->acceleration[updateStep], newAcceleration.x, newAcceleration.y, newAcceleration.z);
+        }
+        for(recvPID = 1; recvPID < _adfinitasMPI_RankSize; ++recvPID){
+            MPI_Send(MPISendPackat, 8, MPI_LONG_DOUBLE, recvPID, _XI_CONTROL_STOP, MPI_COMM_WORLD);
+        }
+    }else{
+        while(MPIStatus.MPI_TAG != _XI_CONTROL_STOP){
+            MPI_Recv(MPIRecvPackat, 8, MPI_LONG_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &MPIStatus);
+
+            if(MPIStatus.MPI_TAG == _XI_CONTROL_COMPUTE){
+                xiInitVector3(&motionPosition, MPIRecvPackat[0], MPIRecvPackat[1], MPIRecvPackat[2]);
+                xiInitVector3(&sourcePosition, MPIRecvPackat[3], MPIRecvPackat[4], MPIRecvPackat[5]);
+
+                adfinitasAcceleration(motionPosition, sourcePosition, MPIRecvPackat[6], MPIRecvPackat[7], &subAcceleration);
+
+                MPISendPackat[0] = subAcceleration.x;
+                MPISendPackat[1] = subAcceleration.y;
+                MPISendPackat[2] = subAcceleration.z;
+
+                MPI_Send(MPISendPackat,3, MPI_LONG_DOUBLE, 0, _XI_CONTROL_COMPUTE, MPI_COMM_WORLD);
+            }
+        }
+    }
+    adfinitasMPIWait();
+}
+
+xiReturnCode adfinitasMPIWait(){
+    int returnCode = 0;
+    returnCode = MPI_Barrier(MPI_COMM_WORLD);
+    if(returnCode != MPI_SUCCESS) return _XI_RETURN_MPI_ERROR;
+    return _XI_RETURN_OK;
+}
+
+void adfinitasMPIStop(){
+    MPI_Finalize();
+}
+
+void adfinitasMPIInit(){
+    MPI_Init(NULL, NULL);
+    MPI_Comm_rank(MPI_COMM_WORLD, &_adfinitasMPI_PID);
+    MPI_Comm_size(MPI_COMM_WORLD, &_adfinitasMPI_RankSize);
+}
+#endif
+
+void adfinitasAcceleration(xiVector3 motionPosition, xiVector3 sourcePosition, long double sourceMass, long double gravitationalConstant, xiVector3 *acceleration){
+    xiVector3 distanceVector;
+    long double distanceMod = 0., accelerationMod = 0.;
+
+    xiFunc2Vector3(xiSub, sourcePosition, motionPosition, &distanceVector);
+    distanceMod = xiModVector3(distanceVector);
+    accelerationMod = gravitationalConstant * sourceMass / powl(distanceMod, 3.);
+    xiMulNumberVector3(accelerationMod, distanceVector, acceleration);
+
+    return;
+}
+
 xiReturnCode adfinitasExportSystemHamilton(adfinitasSystem* system, long double *minHamilton, long double *maxHamilton){
     FILE *filePointer = NULL;
     unsigned long step = 0., bodyIndex = 0;
@@ -17,6 +191,10 @@ xiReturnCode adfinitasExportSystemHamilton(adfinitasSystem* system, long double 
     xiReturnCode returnCode;
     char fileName[maxFileNameLength] = "\0";
     adfinitasBody* body = NULL;
+
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #endif
 
     *minHamilton = INFINITY;
     *maxHamilton = -INFINITY;
@@ -57,6 +235,11 @@ xiReturnCode adfinitasExportSystemHamilton(adfinitasSystem* system, long double 
         fprintf(filePointer, "%Le\t%Le\t%Le\t%Le\n", systemTime,  systemHamilton, systemKineticEnergy, systemPotentialEnergy);
     }
     fclose(filePointer);
+
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID == 0) adfinitasMPIWait();
+    #endif
+
     return _XI_RETURN_OK;
 }
 
@@ -66,6 +249,10 @@ xiReturnCode adfinitasExportBodyHamilton(adfinitasSystem* system, adfinitasBody*
     long double kineticEnergy = 0., potentialEnergy = 0., time = 0., checkTime = 0., hamilton = 0.;
     xiReturnCode returnCode;
     char fileName[maxFileNameLength] = "\0";
+
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #endif
     
     strcat(fileName, "adfinitas-hamilton-");
     strcat(fileName, system->name);
@@ -88,6 +275,11 @@ xiReturnCode adfinitasExportBodyHamilton(adfinitasSystem* system, adfinitasBody*
         fprintf(filePointer, "%Le\t%Le\t%Le\t%Le\n", time,  hamilton, kineticEnergy, potentialEnergy);
     }
     fclose(filePointer);
+
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID == 0) adfinitasMPIWait();
+    #endif
+
     return _XI_RETURN_OK;
 }
 
@@ -95,10 +287,19 @@ xiReturnCode adfinitasExportSystem(adfinitasSystem* system){
     unsigned long bodyIndex = 0;
     xiReturnCode returnCode;
 
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #endif
+
     for(bodyIndex = 0; bodyIndex < system->bodyNumber; ++bodyIndex){
         returnCode = adfinitasExportBody(&system->body[bodyIndex], system);
         if(returnCode != _XI_RETURN_OK) return returnCode;
     }
+
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID == 0) adfinitasMPIWait();
+    #endif
+
     return _XI_RETURN_OK;
 }
 
@@ -107,6 +308,7 @@ xiReturnCode adfinitasExportBody(adfinitasBody* body, adfinitasSystem* system){
     adfinitasTrack* track = NULL;
     char fileName[maxFileNameLength] = "\0";
     unsigned long index = 0;
+
     track = body->firstTrack;
     strcat(fileName, "adfinitas-");
     strcat(fileName, system->name);
@@ -124,6 +326,7 @@ xiReturnCode adfinitasExportBody(adfinitasBody* body, adfinitasSystem* system){
         ++index;
     }
     fclose(filePointer);
+
     return _XI_RETURN_OK;
 }
 
@@ -193,12 +396,19 @@ xiReturnCode adfinitasRunSystem(adfinitasSystem* system){
     unsigned long timeIndex = 0;
     xiReturnCode returnCode;
 
-    // TODO Parallel
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #endif
+
     for(timeIndex = 0; timeIndex < system->totalSteps; ++timeIndex){
-        // returnCode = adfinitasRunOneStep(system);
         returnCode = (*system->integrator)(system);
         if(returnCode != _XI_RETURN_OK) return returnCode;
     }
+
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID == 0) return adfinitasMPIWait();
+    #endif
+
     return _XI_RETURN_OK;
 }
 
@@ -491,6 +701,10 @@ xiReturnCode adfinitasAddBody(adfinitasSystem* system, char* name, long double s
     adfinitasBody* tmpBodyPointer = NULL;
     xiReturnCode returnCode = _XI_RETURN_OK;
 
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #endif
+
     tmpBodyPointer = (adfinitasBody*)realloc(system->body, (system->bodyNumber + 1) * sizeof(adfinitasBody));
     if(tmpBodyPointer == NULL) return _XI_RETURN_ALLOCATION_ERROR;
     system->body = tmpBodyPointer;
@@ -514,18 +728,38 @@ xiReturnCode adfinitasAddBody(adfinitasSystem* system, char* name, long double s
 
     ++system->bodyNumber;
 
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID == 0) adfinitasMPIWait();
+    #endif
+
     return _XI_RETURN_OK;
 }
 
 void adfinitasClearSystem(adfinitasSystem* system){
     unsigned long index = 0;
+
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID != 0){
+            adfinitasMPIWait();
+            return;
+        }
+    #endif
+
     for(index = 0; index < system->bodyNumber; ++index)
         adfinitasClearBody(&system->body[index]);
     free(system->body);
+
+    #ifdef _ADFINITAS_MPI
+        if(_adfinitasMPI_PID == 0){
+            adfinitasMPIWait();
+        }
+    #endif
+
     return;
 }
 
 xiReturnCode adfinitasInitSystem(adfinitasSystem* system, char* name, long double gravitationalConstant, long double simulationTime, long double timeStep, xiReturnCode (*integrator)(adfinitasSystem*)){
+
     system->gravitationalConstant = (gravitationalConstant != 0)? gravitationalConstant : _adfinitasGravitationalConstant;
     system->timeStep = timeStep;
     system->totalSteps = (unsigned long)(ceill(simulationTime / timeStep));
@@ -534,6 +768,7 @@ xiReturnCode adfinitasInitSystem(adfinitasSystem* system, char* name, long doubl
     if(system->body == NULL) return _XI_RETURN_ALLOCATION_ERROR;
     system->integrator = integrator;
     strcpy(system->name, name);
+
     return _XI_RETURN_OK;
 }
 
