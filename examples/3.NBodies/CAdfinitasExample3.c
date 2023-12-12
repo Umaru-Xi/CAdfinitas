@@ -1,5 +1,5 @@
-#include "../../libXi.h"
-#include "../../libCAdfinitas.h"
+#include "libXi.h"
+#include "libCAdfinitas.h"
 
 #include <stdio.h>
 #include <time.h>
@@ -45,7 +45,7 @@ int main(int argc, char* argv[]){
                 sprintf(bodyName, "Body-%d-%d-%d", row, col, height);
                 xiInitVector3(&positionVector, row * lightYear, col * lightYear, height * lightYear);
                 xiInitVector3(&velocityVector, 0., 0., 0.);
-                returnCode = adfinitasAddBody(&system, bodyName, 1.98847e30, 0., positionVector, velocityVector);
+                returnCode = adfinitasAddBody(&system, bodyName, 1.98847e30, 6.95700e8, 0., positionVector, velocityVector);
                 if(returnCode != _XI_RETURN_OK) printf("Add %s Faild.\n", bodyName);
             }
         }

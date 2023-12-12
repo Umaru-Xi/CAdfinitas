@@ -10,7 +10,7 @@ This simulator does not solve collision. So in the example 3.2, the Hamilton of 
 
 * * *  
 
-Dependency: openMPI(ditributed condition only);
+Dependency: [libXi](https://github.com/Umaru-Xi/LibXi "libXi"), openMPI(or other MPI implementation, ditributed condition only);
 
 Example dependency: GNU Plot, make, cc;  
 

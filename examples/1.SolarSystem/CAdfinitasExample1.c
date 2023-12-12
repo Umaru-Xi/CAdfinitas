@@ -1,5 +1,5 @@
-#include "../../libXi.h"
-#include "../../libCAdfinitas.h"
+#include "libXi.h"
+#include "libCAdfinitas.h"
 
 #include <stdio.h>
 #include <time.h>
@@ -36,32 +36,32 @@ int main(int argc, char* argv[]){
 
     xiInitVector3(&positionVector, 0., 0., 0.);
     xiInitVector3(&velocityVector, 0., 0., 0.);
-    returnCode = adfinitasAddBody(&system, "Solar", 1.98847e30, 0., positionVector, velocityVector);
+    returnCode = adfinitasAddBody(&system, "Solar", 1.98847e30, 6.95700e8, 0., positionVector, velocityVector);
     if(returnCode != _XI_RETURN_OK) printf("Add Solar Faild.\n");
 
     xiInitVector3(&positionVector, 5.791e10, 0., 0.);
     xiInitVector3(&velocityVector, 0., 47360., 0.);
-    returnCode = adfinitasAddBody(&system, "Mercury", 3.3011e23, 0., positionVector, velocityVector);
+    returnCode = adfinitasAddBody(&system, "Mercury", 3.3011e23, 2.4397e6 , 0., positionVector, velocityVector);
     if(returnCode != _XI_RETURN_OK) printf("Add Mercury Faild.\n");
 
     xiInitVector3(&positionVector, 1.0821e11, 0., 0.);
     xiInitVector3(&velocityVector, 0., 35020., 0.);
-    returnCode = adfinitasAddBody(&system, "Venus", 4.8675e24, 0., positionVector, velocityVector);
+    returnCode = adfinitasAddBody(&system, "Venus", 4.8675e24, 6.0518e6, 0., positionVector, velocityVector);
     if(returnCode != _XI_RETURN_OK) printf("Add Venus Faild.\n");
 
     xiInitVector3(&positionVector, 1.495978707e11, 0., 0.);
     xiInitVector3(&velocityVector, 0., 29780., 0.);
-    returnCode = adfinitasAddBody(&system, "Earth", 5.9722e24, 0., positionVector, velocityVector);
+    returnCode = adfinitasAddBody(&system, "Earth", 5.9722e24, 6.3710e6, 0., positionVector, velocityVector);
     if(returnCode != _XI_RETURN_OK) printf("Add Earth Faild.\n");
 
     xiInitVector3(&positionVector, 2.27939366000e11, 0., 0.);
     xiInitVector3(&velocityVector, 0., 24070., 0.);
-    returnCode = adfinitasAddBody(&system, "Mars", 6.4171e23, 0., positionVector, velocityVector);
+    returnCode = adfinitasAddBody(&system, "Mars", 6.4171e23, 3.3895e6, 0., positionVector, velocityVector);
     if(returnCode != _XI_RETURN_OK) printf("Add Mars Faild.\n");
 
     xiInitVector3(&positionVector, 7.78479e11, 0., 0.);
     xiInitVector3(&velocityVector, 0., 13070., 0.);
-    returnCode = adfinitasAddBody(&system, "Jupiter", 1.8982e27, 0., positionVector, velocityVector);
+    returnCode = adfinitasAddBody(&system, "Jupiter", 1.8982e27, 6.9911e7, 0., positionVector, velocityVector);
     if(returnCode != _XI_RETURN_OK) printf("Add Jupiter Faild.\n");
 
     #ifdef _ADFINITAS_MPI
@@ -70,6 +70,18 @@ int main(int argc, char* argv[]){
         returnCode = adfinitasRunSystem(&system);
     #endif
     if(returnCode != _XI_RETURN_OK) printf("Running Faild.\n");
+
+    returnCode = adfinitasExportDump(&system);
+    if(returnCode != _XI_RETURN_OK) printf("Dump System Faild.\n");
+
+    adfinitasClearSystem(&system);
+
+    endTime = clock();
+    secondsTime = (float)(endTime - startTime) / CLOCKS_PER_SEC;
+
+    returnCode = adfinitasInitSystemFromDump(&system, "adfinitasDump_Example1", adfinitasIntegratorSemiImplicitEuler);
+    if(returnCode != _XI_RETURN_OK) printf("Load Dump File Faild.\n");
+
     returnCode = adfinitasExportSystem(&system);
     if(returnCode != _XI_RETURN_OK) printf("Exporting Faild.\n");
 
@@ -77,9 +89,6 @@ int main(int argc, char* argv[]){
     if(returnCode != _XI_RETURN_OK) printf("Exporting Hamilton Faild.\n");
 
     adfinitasClearSystem(&system);
-
-    endTime = clock();
-    secondsTime = (float)(endTime - startTime) / CLOCKS_PER_SEC;
 
     #ifdef _ADFINITAS_MPI
         adfinitasMPIStop();

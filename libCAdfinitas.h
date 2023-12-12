@@ -13,6 +13,7 @@
 
 #define maxNameLength 256
 #define maxFileNameLength 1204
+#define fileBufferSize 4096
 
 typedef struct adfinitasTrackStruct{
     unsigned long steps;
@@ -28,6 +29,7 @@ typedef struct adfinitasTrackStruct{
 typedef struct {
     char name[maxNameLength];
     long double staticMass;
+    long double staticRadius;
     adfinitasTrack* firstTrack;
     adfinitasTrack* lastTrack;
 } adfinitasBody;
@@ -56,6 +58,7 @@ void adfinitasMPIInit();
 
 void adfinitasAcceleration(xiVector3 motionPosition, xiVector3 sourcePosition, long double sourceMass, long double gravitationalConstant, xiVector3 *acceleration);
 
+xiReturnCode adfinitasExportDump(adfinitasSystem *system);
 xiReturnCode adfinitasExportSystemHamilton(adfinitasSystem* system, long double *minHamilton, long double *maxHamilton);
 xiReturnCode adfinitasExportBodyHamilton(adfinitasSystem* system, adfinitasBody* body);
 xiReturnCode adfinitasExportSystem(adfinitasSystem* system);
@@ -77,13 +80,14 @@ xiReturnCode adfinitasBodyLoadTrackRecordInv(adfinitasBody* body, signed long be
 xiReturnCode adfinitasBodyLoadTrackRecord(adfinitasBody* body, unsigned long step, long double *time, xiVector3 *position, xiVector3 *velocity, xiVector3 *acceleration);
 xiReturnCode adfinitasBodyInsertTrackRecord(adfinitasBody* body, long double time, xiVector3 position, xiVector3 velocity, xiVector3 acceleration);
 xiReturnCode adfinitasBodyAddTrack(adfinitasBody* body, unsigned long totalSteps);
-xiReturnCode adfinitasAddBody(adfinitasSystem* system, char* name, long double staticMass, long double startTime, xiVector3 startPosition, xiVector3 startVelocity);
+xiReturnCode adfinitasAddBody(adfinitasSystem* system, char* name, long double staticMass, long double staticRadius, long double startTime, xiVector3 startPosition, xiVector3 startVelocity);
 
 void adfinitasClearSystem(adfinitasSystem* system);
+xiReturnCode adfinitasInitSystemFromDump(adfinitasSystem *system, const char *directoryName, xiReturnCode (*integrator)(adfinitasSystem*));
 xiReturnCode adfinitasInitSystem(adfinitasSystem* system, char* name, long double gravitationalConstant, long double simulationTime, long double timeStep, xiReturnCode (*integrator)(adfinitasSystem*));
 
 void adfinitasClearBody(adfinitasBody* body);
-xiReturnCode adfinitasInitBody(adfinitasBody* body, char* name, long double staticMass);
+xiReturnCode adfinitasInitBody(adfinitasBody* body, char* name, long double staticMass, long double staticRadius);
 
 void adfinitasClearTracksChain(adfinitasBody* body);
 void _adfinitasClearTrack(adfinitasTrack* track);

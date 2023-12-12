@@ -6,7 +6,7 @@ clear:
 	-rm -rf ./build
 
 build: clear
-	gcc CAdfinitasExample2.c ../../libCAdfinitas.c ../../libXi.c -o CAdfinitasExample2.run -lm -L../../
+	gcc -lm -I../../ -I../../../LibXi/ CAdfinitasExample2.c ../../libCAdfinitas.c ../../../LibXi/libXi.c -o CAdfinitasExample2.run 
 	mkdir -p build/data
 	-mv ./*.run build/
 
@@ -22,7 +22,7 @@ plot:
 all: clear run plot
 
 build_mpi: clear
-	mpicc -D_ADFINITAS_MPI CAdfinitasExample2.c ../../libCAdfinitas.c ../../libXi.c -o CAdfinitasExample2MPI.run -lm -L../../
+	mpicc -D_ADFINITAS_MPI -lm -I../../ -I../../../LibXi/ CAdfinitasExample2.c ../../libCAdfinitas.c ../../../LibXi/libXi.c -o CAdfinitasExample2MPI.run
 	mkdir -p build/data
 	-mv ./*.run build/
 
