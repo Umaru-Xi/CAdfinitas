@@ -26,7 +26,7 @@ run: build
 all: clear run plot
 
 build_mpi: clear
-	mpicc -D_ADFINITAS_MPI -I../../ -I../../../LibXi/ -lm CAdfinitasExample1.c ../../libCAdfinitas.c ../../../LibXi/libXi.c -o CAdfinitasExample1MPI.run
+	mpicc -D_XI_MPI -I../../ -I../../../LibXi/ -lm CAdfinitasExample1.c ../../libCAdfinitas.c ../../../LibXi/libXi.c -o CAdfinitasExample1MPI.run
 	mkdir -p build/data
 	-mv ./*.run build/
 

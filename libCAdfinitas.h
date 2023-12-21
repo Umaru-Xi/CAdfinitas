@@ -7,8 +7,6 @@
 #ifndef _LIB_C_ADFINITAS
 #define _LIB_C_ADFINITAS
 
-// #define _ADFINITAS_MPI  // Use this flag to enable MPI (In CC Flags)
-
 #include "libXi.h"
 
 #define maxNameLength 256
@@ -44,16 +42,13 @@ typedef struct adfinitasSystemStruct{
     adfinitasBody* body;
 } adfinitasSystem;
 
-#ifdef _ADFINITAS_MPI
+#ifdef _XI_MPI
 xiReturnCode adfinitasMPIIntegratorSemiImplicitEuler(adfinitasSystem* system);
 
 void adfinitaMPIUpdateAllAcceleration(adfinitasSystem* system);
 
 xiReturnCode adfinitasMPIRunSystem(adfinitasSystem* system);
 
-xiReturnCode adfinitasMPIWait();
-void adfinitasMPIStop();
-void adfinitasMPIInit();
 #endif
 
 void adfinitasAcceleration(xiVector3 motionPosition, xiVector3 sourcePosition, long double sourceMass, long double gravitationalConstant, xiVector3 *acceleration);

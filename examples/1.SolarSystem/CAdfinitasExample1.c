@@ -4,8 +4,8 @@
 #include <stdio.h>
 #include <time.h>
 
-#ifdef _ADFINITAS_MPI
-    extern int _adfinitasMPI_PID, _adfinitasMPI_RankSize;
+#ifdef _XI_MPI
+    extern int _xiMPI_PID, _xiMPI_RankSize;
 #endif
 
 int main(int argc, char* argv[]){
@@ -23,8 +23,8 @@ int main(int argc, char* argv[]){
 
     startTime = clock();
 
-    #ifdef _ADFINITAS_MPI
-        adfinitasMPIInit();
+    #ifdef _XI_MPI
+        xiMPIInit();
 
         startTime = clock();
         returnCode = adfinitasInitSystem(&system, systemName, 0., simulationTime, timeStep, adfinitasMPIIntegratorSemiImplicitEuler);
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]){
     returnCode = adfinitasAddBody(&system, "Jupiter", 1.8982e27, 6.9911e7, 0., positionVector, velocityVector);
     if(returnCode != _XI_RETURN_OK) printf("Add Jupiter Faild.\n");
 
-    #ifdef _ADFINITAS_MPI
+    #ifdef _XI_MPI
         returnCode = adfinitasMPIRunSystem(&system);
     #else
         returnCode = adfinitasRunSystem(&system);
@@ -90,9 +90,9 @@ int main(int argc, char* argv[]){
 
     adfinitasClearSystem(&system);
 
-    #ifdef _ADFINITAS_MPI
-        adfinitasMPIStop();
-        if(_adfinitasMPI_PID == 0)
+    #ifdef _XI_MPI
+        xiMPIStop();
+        if(_xiMPI_PID == 0)
             printf("Total Time: %Les\n", secondsTime);
     #else
         printf("Total Time: %Les\n", secondsTime);

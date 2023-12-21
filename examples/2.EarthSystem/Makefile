@@ -22,7 +22,7 @@ plot:
 all: clear run plot
 
 build_mpi: clear
-	mpicc -D_ADFINITAS_MPI -lm -I../../ -I../../../LibXi/ CAdfinitasExample2.c ../../libCAdfinitas.c ../../../LibXi/libXi.c -o CAdfinitasExample2MPI.run
+	mpicc -D_XI_MPI -lm -I../../ -I../../../LibXi/ CAdfinitasExample2.c ../../libCAdfinitas.c ../../../LibXi/libXi.c -o CAdfinitasExample2MPI.run
 	mkdir -p build/data
 	-mv ./*.run build/
 
@@ -30,4 +30,4 @@ run_mpi: build_mpi
 	mpirun ./build/CAdfinitasExample2MPI.run
 	-mv ./*.dat build/data/
 
-all_mpi: clear run_mpi plots
+all_mpi: clear run_mpi plot

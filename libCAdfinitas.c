@@ -10,10 +10,11 @@ const long double _adfinitasGravitationalConstant = 6.6743e-11;
 const long double _adfinitasVacuumPermittivity = 8.8541878128e-12;
 const long double _adfinitasVacuumPermeability = 1.25663706212e-6;
 
-#ifdef _ADFINITAS_MPI
+#ifdef _XI_MPI
 #include <mpi.h>
-int _adfinitasMPI_PID = 0, _adfinitasMPI_RankSize = 0;
-unsigned int isWait = 0;
+
+extern int _xiMPI_PID, _xiMPI_RankSize;
+extern unsigned int _xiMPI_isWait;
 
 xiReturnCode adfinitasMPIRunSystem(adfinitasSystem* system){
     unsigned long timeIndex = 0;
@@ -38,7 +39,7 @@ xiReturnCode adfinitasMPIIntegratorSemiImplicitEuler(adfinitasSystem* system){
     xiVector3 newPosition, newVelocity, newAcceleration;
     unsigned long motionBodyIndex = 0;
 
-    if(_adfinitasMPI_PID == 0){
+    if(_xiMPI_PID == 0){
         timeStep = system->timeStep;
         xiInitVector3(&newAcceleration, 0., 0., 0.);
         for(motionBodyIndex = 0; motionBodyIndex < system->bodyNumber; ++motionBodyIndex){
@@ -64,7 +65,7 @@ xiReturnCode adfinitasMPIIntegratorSemiImplicitEuler(adfinitasSystem* system){
             system->body[motionBodyIndex].lastTrack->steps = system->body[motionBodyIndex].lastTrack->steps + 1;
         }
     }
-    adfinitasMPIWait();
+    xiMPIWait();
 
     adfinitaMPIUpdateAllAcceleration(system);
 
@@ -85,7 +86,7 @@ void adfinitaMPIUpdateAllAcceleration(adfinitasSystem* system){
 
     PID = 1;
     MPIStatus.MPI_TAG = _XI_CONTROL_WAIT;
-    if(_adfinitasMPI_PID == 0){
+    if(_xiMPI_PID == 0){
         MPISendPackat[7] = system->gravitationalConstant;
         for(motionBodyIndex = 0; motionBodyIndex < system->bodyNumber; ++motionBodyIndex){
 
@@ -110,8 +111,8 @@ void adfinitaMPIUpdateAllAcceleration(adfinitasSystem* system){
 
                 MPI_Send(MPISendPackat, 8, MPI_LONG_DOUBLE, PID, _XI_CONTROL_COMPUTE, MPI_COMM_WORLD);
                 ++PID;
-                if(PID >= _adfinitasMPI_RankSize){
-                    for(recvPID = 1; recvPID < _adfinitasMPI_RankSize; ++recvPID){
+                if(PID >= _xiMPI_RankSize){
+                    for(recvPID = 1; recvPID < _xiMPI_RankSize; ++recvPID){
 
                         MPI_Recv(MPIRecvPackat, 3, MPI_LONG_DOUBLE, recvPID, MPI_ANY_TAG, MPI_COMM_WORLD, &MPIStatus);
 
@@ -132,7 +133,7 @@ void adfinitaMPIUpdateAllAcceleration(adfinitasSystem* system){
             }
             xiInitVector3(&motionTrack->acceleration[updateStep], newAcceleration.x, newAcceleration.y, newAcceleration.z);
         }
-        for(recvPID = 1; recvPID < _adfinitasMPI_RankSize; ++recvPID){
+        for(recvPID = 1; recvPID < _xiMPI_RankSize; ++recvPID){
             MPI_Send(MPISendPackat, 8, MPI_LONG_DOUBLE, recvPID, _XI_CONTROL_STOP, MPI_COMM_WORLD);
         }
     }else{
@@ -153,26 +154,9 @@ void adfinitaMPIUpdateAllAcceleration(adfinitasSystem* system){
             }
         }
     }
-    adfinitasMPIWait();
+    xiMPIWait();
 }
 
-xiReturnCode adfinitasMPIWait(){
-    int returnCode = 0;
-    if(_adfinitasMPI_PID == 0 && isWait != 0) return _XI_RETURN_OK;
-    returnCode = MPI_Barrier(MPI_COMM_WORLD);
-    if(returnCode != MPI_SUCCESS) return _XI_RETURN_MPI_ERROR;
-    return _XI_RETURN_OK;
-}
-
-void adfinitasMPIStop(){
-    MPI_Finalize();
-}
-
-void adfinitasMPIInit(){
-    MPI_Init(NULL, NULL);
-    MPI_Comm_rank(MPI_COMM_WORLD, &_adfinitasMPI_PID);
-    MPI_Comm_size(MPI_COMM_WORLD, &_adfinitasMPI_RankSize);
-}
 #endif
 
 void adfinitasAcceleration(xiVector3 motionPosition, xiVector3 sourcePosition, long double sourceMass, long double gravitationalConstant, xiVector3 *acceleration){
@@ -196,9 +180,9 @@ xiReturnCode adfinitasExportDump(adfinitasSystem *system){
     long double time = 0.;
     xiVector3 position, velocity, acceleration;
 
-    #ifdef _ADFINITAS_MPI
-        ++isWait;
-        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #ifdef _XI_MPI
+        ++_xiMPI_isWait;
+        if(_xiMPI_PID != 0) return xiMPIWait();
     #endif
 
     strcat(dirName, "adfinitasDump_");
@@ -237,9 +221,9 @@ xiReturnCode adfinitasExportDump(adfinitasSystem *system){
     }
     fclose(filePointer);
 
-    #ifdef _ADFINITAS_MPI
-        --isWait;
-        if(_adfinitasMPI_PID == 0) adfinitasMPIWait();
+    #ifdef _XI_MPI
+        --_xiMPI_isWait;
+        if(_xiMPI_PID == 0) xiMPIWait();
     #endif
     
     return _XI_RETURN_OK;
@@ -253,9 +237,9 @@ xiReturnCode adfinitasExportSystemHamilton(adfinitasSystem* system, long double 
     char fileName[maxFileNameLength] = "\0";
     adfinitasBody* body = NULL;
 
-    #ifdef _ADFINITAS_MPI
-        ++isWait;
-        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #ifdef _XI_MPI
+        ++_xiMPI_isWait;
+        if(_xiMPI_PID != 0) return xiMPIWait();
     #endif
 
     *minHamilton = INFINITY;
@@ -298,9 +282,9 @@ xiReturnCode adfinitasExportSystemHamilton(adfinitasSystem* system, long double 
     }
     fclose(filePointer);
 
-    #ifdef _ADFINITAS_MPI
-        --isWait;
-        if(_adfinitasMPI_PID == 0) adfinitasMPIWait();
+    #ifdef _XI_MPI
+        --_xiMPI_isWait;
+        if(_xiMPI_PID == 0) xiMPIWait();
     #endif
 
     return _XI_RETURN_OK;
@@ -313,9 +297,9 @@ xiReturnCode adfinitasExportBodyHamilton(adfinitasSystem* system, adfinitasBody*
     xiReturnCode returnCode;
     char fileName[maxFileNameLength] = "\0";
 
-    #ifdef _ADFINITAS_MPI
-        ++isWait;
-        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #ifdef _XI_MPI
+        ++_xiMPI_isWait;
+        if(_xiMPI_PID != 0) return xiMPIWait();
     #endif
     
     strcat(fileName, "adfinitas-hamilton-");
@@ -340,9 +324,9 @@ xiReturnCode adfinitasExportBodyHamilton(adfinitasSystem* system, adfinitasBody*
     }
     fclose(filePointer);
 
-    #ifdef _ADFINITAS_MPI
-        --isWait;
-        if(_adfinitasMPI_PID == 0) adfinitasMPIWait();
+    #ifdef _XI_MPI
+        --_xiMPI_isWait;
+        if(_xiMPI_PID == 0) xiMPIWait();
     #endif
 
     return _XI_RETURN_OK;
@@ -352,9 +336,9 @@ xiReturnCode adfinitasExportSystem(adfinitasSystem* system){
     unsigned long bodyIndex = 0;
     xiReturnCode returnCode;
 
-    #ifdef _ADFINITAS_MPI
-        ++isWait;
-        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #ifdef _XI_MPI
+        ++_xiMPI_isWait;
+        if(_xiMPI_PID != 0) return xiMPIWait();
     #endif
 
     for(bodyIndex = 0; bodyIndex < system->bodyNumber; ++bodyIndex){
@@ -362,9 +346,9 @@ xiReturnCode adfinitasExportSystem(adfinitasSystem* system){
         if(returnCode != _XI_RETURN_OK) return returnCode;
     }
 
-    #ifdef _ADFINITAS_MPI
-        --isWait;
-        if(_adfinitasMPI_PID == 0) adfinitasMPIWait();
+    #ifdef _XI_MPI
+        --_xiMPI_isWait;
+        if(_xiMPI_PID == 0) xiMPIWait();
     #endif
 
     return _XI_RETURN_OK;
@@ -463,9 +447,9 @@ xiReturnCode adfinitasRunSystem(adfinitasSystem* system){
     unsigned long timeIndex = 0;
     xiReturnCode returnCode;
 
-    #ifdef _ADFINITAS_MPI
-        ++isWait;
-        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #ifdef _XI_MPI
+        ++_xiMPI_isWait;
+        if(_xiMPI_PID != 0) return xiMPIWait();
     #endif
 
     for(timeIndex = 0; timeIndex < system->totalSteps; ++timeIndex){
@@ -473,9 +457,9 @@ xiReturnCode adfinitasRunSystem(adfinitasSystem* system){
         if(returnCode != _XI_RETURN_OK) return returnCode;
     }
 
-    #ifdef _ADFINITAS_MPI
-        --isWait;
-        if(_adfinitasMPI_PID == 0) return adfinitasMPIWait();
+    #ifdef _XI_MPI
+        --_xiMPI_isWait;
+        if(_xiMPI_PID == 0) return xiMPIWait();
     #endif
 
     return _XI_RETURN_OK;
@@ -770,9 +754,9 @@ xiReturnCode adfinitasAddBody(adfinitasSystem* system, char* name, long double s
     adfinitasBody* tmpBodyPointer = NULL;
     xiReturnCode returnCode = _XI_RETURN_OK;
 
-    #ifdef _ADFINITAS_MPI
-        ++isWait;
-        if(_adfinitasMPI_PID != 0) return adfinitasMPIWait();
+    #ifdef _XI_MPI
+        ++_xiMPI_isWait;
+        if(_xiMPI_PID != 0) return xiMPIWait();
     #endif
 
     tmpBodyPointer = (adfinitasBody*)realloc(system->body, (system->bodyNumber + 1) * sizeof(adfinitasBody));
@@ -798,9 +782,9 @@ xiReturnCode adfinitasAddBody(adfinitasSystem* system, char* name, long double s
 
     ++system->bodyNumber;
 
-    #ifdef _ADFINITAS_MPI
-        --isWait;
-        if(_adfinitasMPI_PID == 0) adfinitasMPIWait();
+    #ifdef _XI_MPI
+        --_xiMPI_isWait;
+        if(_xiMPI_PID == 0) xiMPIWait();
     #endif
 
     return _XI_RETURN_OK;
@@ -809,10 +793,10 @@ xiReturnCode adfinitasAddBody(adfinitasSystem* system, char* name, long double s
 void adfinitasClearSystem(adfinitasSystem* system){
     unsigned long index = 0;
 
-    #ifdef _ADFINITAS_MPI
-        ++isWait;
-        if(_adfinitasMPI_PID != 0){
-            adfinitasMPIWait();
+    #ifdef _XI_MPI
+        ++_xiMPI_isWait;
+        if(_xiMPI_PID != 0){
+            xiMPIWait();
             return;
         }
     #endif
@@ -821,10 +805,10 @@ void adfinitasClearSystem(adfinitasSystem* system){
         adfinitasClearBody(&system->body[index]);
     free(system->body);
 
-    #ifdef _ADFINITAS_MPI
-        --isWait;
-        if(_adfinitasMPI_PID == 0){
-            adfinitasMPIWait();
+    #ifdef _XI_MPI
+        --_xiMPI_isWait;
+        if(_xiMPI_PID == 0){
+            xiMPIWait();
         }
     #endif
 
@@ -853,10 +837,10 @@ xiReturnCode adfinitasInitSystemFromDump(adfinitasSystem *system, const char *di
     returnCode = adfinitasInitSystem(system, name, gravitationalConstant, totalSteps * timeStep, timeStep, integrator);
     if(returnCode != _XI_RETURN_OK) return returnCode;
 
-    #ifdef _ADFINITAS_MPI
-        ++isWait;
-        if(_adfinitasMPI_PID != 0){
-            adfinitasMPIWait();
+    #ifdef _XI_MPI
+        ++_xiMPI_isWait;
+        if(_xiMPI_PID != 0){
+            xiMPIWait();
             return _XI_RETURN_OK;
         }
     #endif
@@ -894,10 +878,10 @@ xiReturnCode adfinitasInitSystemFromDump(adfinitasSystem *system, const char *di
     }
     fclose(filePointer);
 
-    #ifdef _ADFINITAS_MPI
-        --isWait;
-        if(_adfinitasMPI_PID == 0){
-            adfinitasMPIWait();
+    #ifdef _XI_MPI
+        --_xiMPI_isWait;
+        if(_xiMPI_PID == 0){
+            xiMPIWait();
         }
     #endif
     

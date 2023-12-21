@@ -4,8 +4,8 @@
 #include <stdio.h>
 #include <time.h>
 
-#ifdef _ADFINITAS_MPI
-    extern int _adfinitasMPI_PID, _adfinitasMPI_RankSize;
+#ifdef _XI_MPI
+    extern int _xiMPI_PID, _xiMPI_RankSize;
 #endif
 
 int main(int argc, char* argv[]){
@@ -23,8 +23,8 @@ int main(int argc, char* argv[]){
 
     startTime = clock();
 
-    #ifdef _ADFINITAS_MPI
-        adfinitasMPIInit();
+    #ifdef _XI_MPI
+        xiMPIInit();
 
         startTime = clock();
         returnCode = adfinitasInitSystem(&system, systemName, 0., simulationTime, timeStep, adfinitasMPIIntegratorSemiImplicitEuler);
@@ -34,7 +34,7 @@ int main(int argc, char* argv[]){
     #endif
     if(returnCode != _XI_RETURN_OK) printf("Init System Faild.\n");
 
-    int maxRow = 4, maxCol = 4, maxHeight = 4;
+    int maxRow = 10, maxCol = 10, maxHeight = 10;
     int row = 0, col = 0, height = 0;
     char bodyName[256];
     long double lightYear = 9.4607e15;
@@ -51,7 +51,7 @@ int main(int argc, char* argv[]){
         }
     }
 
-    #ifdef _ADFINITAS_MPI
+    #ifdef _XI_MPI
         returnCode = adfinitasMPIRunSystem(&system);
     #else
         returnCode = adfinitasRunSystem(&system);
@@ -68,9 +68,9 @@ int main(int argc, char* argv[]){
     endTime = clock();
     secondsTime = (float)(endTime - startTime) / CLOCKS_PER_SEC;
 
-    #ifdef _ADFINITAS_MPI
-        adfinitasMPIStop();
-        if(_adfinitasMPI_PID == 0)
+    #ifdef _XI_MPI
+        xiMPIStop();
+        if(_xiMPI_PID == 0)
             printf("Total Time: %Les\n", secondsTime);
     #else
         printf("Total Time: %Les\n", secondsTime);
